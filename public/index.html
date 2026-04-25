@@ -577,15 +577,33 @@
       // Fetch stocks — full NSE universe
       const fetchStocks = useCallback(async () => {
         setLoading(true);
-        setLoadingMsg("Fetching all NSE stocks from Yahoo Finance... (this may take 30-60s for 2000+ stocks)");
+
+        // Phase 1: Load Nifty 50 instantly (works on Vercel free tier)
         try {
+          setLoadingMsg("Loading Nifty 50...");
+          const res50 = await fetch(API_BASE + "/api/stocks?mode=nifty50");
+          const data50 = await res50.json();
+          if (data50.stocks) {
+            const scored = data50.stocks.map(s => ({ ...s, score: calcScore(s) }));
+            setStocks(scored);
+            setUpdatedAt(data50.updatedAt);
+            setTotalTickers(data50.totalTickers || scored.length);
+            if (data50.sectors) setSectors(data50.sectors);
+            if (data50.industries) setIndustries(data50.industries);
+          }
+        } catch(e) { console.error("Nifty50 fetch error:", e); }
+        setLoading(false);
+
+        // Phase 2: Load all 2000+ stocks in background (may timeout on free Vercel)
+        try {
+          setLoadingMsg("Loading all NSE stocks in background...");
           let url = API_BASE + "/api/stocks?mode=all";
           if (customTickers.length > 0) {
             url += "&tickers=" + customTickers.map(t => t + ".NS").join(",");
           }
           const res = await fetch(url);
           const data = await res.json();
-          if (data.stocks) {
+          if (data.stocks && data.stocks.length > 50) {
             const scored = data.stocks.map(s => ({ ...s, score: calcScore(s) }));
             setStocks(scored);
             setUpdatedAt(data.updatedAt);
@@ -593,8 +611,10 @@
             if (data.sectors) setSectors(data.sectors);
             if (data.industries) setIndustries(data.industries);
           }
-        } catch(e) { console.error("Fetch stocks error:", e); }
-        setLoading(false);
+        } catch(e) {
+          // Silently fail — Nifty 50 is already showing
+          console.warn("Full NSE load failed (timeout?) — showing Nifty 50 only:", e.message);
+        }
       }, [customTickers]);
 
       // Fetch news
