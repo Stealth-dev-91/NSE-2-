@@ -400,19 +400,26 @@
   <div id="root"></div>
   <script type="text/babel">
     // ─── CONFIG ───
-    const SUPABASE_URL = "YOUR_SUPABASE_URL";
-    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
-    const API_BASE = "";  // empty for same-origin; set to full URL for local dev with separate server
-
-    // ─── SUPABASE ───
+    const API_BASE = "";
     let sb = null;
     let sbOk = false;
-    try {
-      if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY") {
-        sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        sbOk = true;
+
+    // Fetch Supabase config from server (env vars live there, not in static HTML)
+    async function initSupabase() {
+      try {
+        const res = await fetch(API_BASE + "/api/config");
+        const cfg = await res.json();
+        if (cfg.supabaseUrl && cfg.supabaseAnonKey) {
+          sb = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+          sbOk = true;
+          console.log("Supabase connected ✓");
+        }
+      } catch(e) {
+        console.warn("Supabase not configured — watchlist uses localStorage:", e.message);
       }
-    } catch(e) { console.warn("Supabase init failed:", e); }
+    }
+    // Fire and forget — app renders immediately, Supabase connects in background
+    initSupabase();
 
     // ─── HELPERS ───
     const fmt = (n, d=2) => (n == null || isNaN(n)) ? "—" : Number(n).toFixed(d);

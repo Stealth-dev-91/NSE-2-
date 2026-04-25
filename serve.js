@@ -12,6 +12,7 @@ const newsHandler = (await import("./api/news.js")).default;
 const nseListHandler = (await import("./api/nse-list.js")).default;
 const chartHandler = (await import("./api/chart.js")).default;
 const analystSnapshotHandler = (await import("./api/analyst-snapshot.js")).default;
+const configHandler = (await import("./api/config.js")).default;
 
 const indexPath = join(__dirname, "public", "index.html");
 
@@ -47,6 +48,8 @@ const server = createServer(async (req, res) => {
     } else if (url.pathname === "/api/analyst-snapshot") {
       fakeReq.method = req.method;
       await analystSnapshotHandler(fakeReq, fakeRes);
+    } else if (url.pathname === "/api/config") {
+      await configHandler(fakeReq, fakeRes);
     } else {
       res.writeHead(200, { "Content-Type": "text/html", "Access-Control-Allow-Origin": "*" });
       res.end(readFileSync(indexPath, "utf8"));
