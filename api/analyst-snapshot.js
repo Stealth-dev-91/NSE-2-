@@ -101,13 +101,13 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   // Check for Supabase config via env
-  const sbUrl = process.env.SUPABASE_URL;
-  const sbKey = process.env.SUPABASE_SERVICE_KEY; // use service key for server-side writes
+  const sbUrl = process.env.SUPABASE_URL || "https://jvdtliqrstgvioigfcjc.supabase.co";
+  const sbKey = process.env.SUPABASE_SERVICE_KEY; // must be set in Vercel env vars
 
-  if (!sbUrl || !sbKey) {
+  if (!sbKey) {
     return res.status(200).json({
       error: null,
-      message: "Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY env vars.",
+      message: "SUPABASE_SERVICE_KEY not set. Add it to Vercel environment variables.",
       schema: getSchema(),
     });
   }
