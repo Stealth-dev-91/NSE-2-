@@ -1,0 +1,29 @@
+{
+  "functions": {
+    "api/stocks.js": {
+      "maxDuration": 60
+    },
+    "api/detail.js": {
+      "maxDuration": 15
+    },
+    "api/news.js": {
+      "maxDuration": 10
+    },
+    "api/nse-list.js": {
+      "maxDuration": 15
+    },
+    "api/analyst-snapshot.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/analyst-snapshot?mode=snapshot",
+      "schedule": "0 18 * * 5"
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/public/index.html" }
+  ]
+}

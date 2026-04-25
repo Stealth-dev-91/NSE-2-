@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NSE Screener</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0e17; --card: #111827; --border: #1f2937;
+      --orange: #e07028; --blue: #6b9fc8; --green: #2d9d5c;
+      --red: #c94040; --amber: #c99a2e; --text: #d1d5db;
+      --muted: #7f8a9b; --dim: #525e6f;
+      --accent: #4a8fc2;
+    }
+    html { font-size: 14px; }
+    body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    input, button { font-family: inherit; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .fade-in { animation: fadeIn 0.4s ease-out; }
+    .slide-up { animation: slideUp 0.35s ease-out; }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+    .skeleton {
+      background: linear-gradient(90deg, var(--card) 25%, #1a2540 50%, var(--card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+    }
+
+    /* Header */
+    .header {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(2, 6, 23, 0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .header h1 { font-size: 1.3rem; font-weight: 700; color: var(--text); white-space: nowrap; letter-spacing: -0.5px; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 2s infinite; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* Buttons */
+    .btn {
+      padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text); cursor: pointer; font-size: 0.85rem;
+      transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--orange); background: #1a1a2e; }
+    .btn-primary { background: var(--orange); border-color: var(--orange); color: #000; font-weight: 600; }
+    .btn-primary:hover { background: #ea580c; }
+    .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+    /* Search */
+    .search-bar {
+      width: 100%; max-width: 480px; padding: 8px 14px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--card); color: var(--text);
+      font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+    }
+    .search-bar:focus { border-color: var(--orange); }
+    .search-bar::placeholder { color: var(--dim); }
+
+    /* Filters */
+    .filters-panel {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px; margin: 12px 20px; display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+    }
+    .filter-group label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+    .filter-group input {
+      width: 100%; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; outline: none;
+    }
+    .filter-group input:focus { border-color: var(--orange); }
+    .filter-group select {
+      width: 100%; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      font-size: 0.85rem; outline: none; cursor: pointer; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+    }
+    .filter-group select:focus { border-color: var(--orange); }
+
+    /* Progress bar */
+    .progress-bar { height: 3px; background: var(--border); width: 100%; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--orange); transition: width 0.3s; }
+
+    /* Stock count badge */
+    .stock-count {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.78rem; color: var(--dim); padding: 4px 12px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .stock-count strong { color: var(--orange); font-family: 'JetBrains Mono', monospace; }
+
+    /* Industry tags */
+    .industry-tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 0.65rem; background: rgba(56, 189, 248, 0.1); color: var(--blue);
+      max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .sector-tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 0.65rem; background: rgba(249, 115, 22, 0.1); color: var(--orange);
+    }
+
+    /* Chips */
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 20px; margin: 12px 0; }
+    .chip {
+      padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border);
+      background: var(--card); color: var(--muted); cursor: pointer; font-size: 0.8rem;
+      transition: all 0.2s; user-select: none;
+    }
+    .chip:hover { border-color: var(--orange); color: var(--text); }
+    .chip.active { background: var(--orange); border-color: var(--orange); color: #000; font-weight: 600; }
+    .chip-desc {
+      padding: 6px 20px; font-size: 0.78rem; color: var(--muted);
+      font-style: italic; animation: fadeIn 0.3s;
+    }
+
+    /* News */
+    .news-section { padding: 0 20px; margin: 16px 0; }
+    .news-section h3 { font-size: 1rem; margin-bottom: 10px; color: var(--muted); }
+    .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+    .news-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px; transition: border-color 0.2s;
+    }
+    .news-card:hover { border-color: var(--blue); }
+    .news-card .title { font-size: 0.85rem; font-weight: 500; line-height: 1.4; margin-bottom: 6px; }
+    .news-card .meta { font-size: 0.72rem; color: var(--dim); display: flex; justify-content: space-between; }
+
+    /* Top Picks */
+    .top-picks { padding: 0 20px; margin: 16px 0; }
+    .top-picks h3 { font-size: 1rem; margin-bottom: 10px; color: var(--text); font-weight: 600; }
+    .picks-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+    .pick-card {
+      min-width: 180px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; flex-shrink: 0;
+    }
+    .pick-card .pick-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 2px; }
+    .pick-card .pick-ticker { font-size: 0.75rem; color: var(--dim); margin-bottom: 8px; }
+    .pick-card .score-bar { height: 6px; border-radius: 3px; background: var(--border); margin: 6px 0; }
+    .pick-card .score-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .pick-card .pick-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; padding: 0 20px; margin: 12px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    thead th {
+      position: sticky; top: 52px; background: var(--bg);
+      padding: 8px 10px; text-align: left; color: var(--muted); font-weight: 500;
+      border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; user-select: none;
+    }
+    thead th:hover { color: var(--orange); }
+    tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
+    tbody tr:hover { background: rgba(249, 115, 22, 0.05); }
+    td { padding: 8px 10px; white-space: nowrap; }
+    .sort-arrow { margin-left: 4px; font-size: 0.7rem; }
+
+    /* Star */
+    .star-btn { background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 2px; }
+
+    /* Badge */
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .badge-green { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+    .badge-red { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+    .badge-amber { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+    .badge-blue { background: rgba(56, 189, 248, 0.15); color: var(--blue); }
+
+    /* 52w bar in table */
+    .range-bar { width: 80px; height: 6px; background: var(--border); border-radius: 3px; position: relative; }
+    .range-dot {
+      position: absolute; top: -3px; width: 12px; height: 12px; border-radius: 50%;
+      background: var(--orange); border: 2px solid var(--bg); transform: translateX(-50%);
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100;
+      display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px;
+      overflow-y: auto;
+    }
+    .modal {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      width: 100%; max-width: 720px; padding: 24px; position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 14px; right: 14px; background: none; border: none;
+      color: var(--muted); font-size: 1.4rem; cursor: pointer;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal h2 { font-size: 1.2rem; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+    .modal .sub { color: var(--dim); font-size: 0.8rem; margin-bottom: 16px; }
+
+    /* Detail grid */
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin: 14px 0; }
+    .detail-card {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px; text-align: center;
+    }
+    .detail-card .label { font-size: 0.7rem; color: var(--dim); margin-bottom: 4px; }
+    .detail-card .val { font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; font-weight: 600; }
+    .section-title { font-size: 0.85rem; color: var(--muted); font-weight: 600; margin: 18px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+
+    /* 52w slider in modal */
+    .range-slider { margin: 14px 0; }
+    .range-track { height: 8px; background: var(--border); border-radius: 4px; position: relative; margin: 8px 0; }
+    .range-filled { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--red), var(--amber), var(--green)); }
+    .range-marker {
+      position: absolute; top: -6px; width: 20px; height: 20px; border-radius: 50%;
+      border: 2px solid var(--bg); transform: translateX(-50%);
+    }
+    .range-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--dim); }
+
+    /* Analyst bar */
+    .analyst-targets { display: flex; align-items: center; gap: 16px; margin: 10px 0; flex-wrap: wrap; }
+    .target-item { text-align: center; }
+    .target-item .tl { font-size: 0.7rem; color: var(--dim); }
+    .target-item .tv { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; font-weight: 600; }
+
+    /* About */
+    .about-toggle { color: var(--blue); cursor: pointer; font-size: 0.82rem; background: none; border: none; }
+    .about-text { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin-top: 8px; max-height: 200px; overflow-y: auto; }
+
+    /* Login */
+    .login-screen {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; gap: 20px;
+    }
+    .login-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 32px; width: 100%; max-width: 380px; text-align: center;
+    }
+    .login-box h1 { font-size: 1.8rem; color: var(--text); margin-bottom: 6px; font-weight: 700; }
+    .login-box p { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+    .login-box input {
+      width: 100%; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      font-size: 1rem; outline: none; margin-bottom: 14px;
+    }
+    .login-box input:focus { border-color: var(--orange); }
+    .sb-status { font-size: 0.75rem; margin-top: 10px; }
+
+    /* Score legend */
+    .legend { padding: 12px 20px; font-size: 0.72rem; color: var(--dim); line-height: 1.6; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .header { padding: 10px 12px; }
+      .header h1 { font-size: 1.1rem; }
+      .filters-panel, .news-section, .top-picks, .chips, .table-wrap, .chip-desc, .legend { padding-left: 12px; padding-right: 12px; }
+      .filters-panel { margin: 8px 12px; }
+      .modal { padding: 16px; }
+      .detail-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* Add ticker modal */
+    .add-ticker-input {
+      width: 100%; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: 1rem; outline: none;
+      text-transform: uppercase; margin: 12px 0;
+    }
+    .add-ticker-input:focus { border-color: var(--orange); }
+    .error-text { color: var(--red); font-size: 0.82rem; margin-top: 6px; }
+
+    /* Analysis Verdict */
+    .verdict-panel {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; margin: 14px 0;
+    }
+    .verdict-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .verdict-label { font-size: 0.95rem; font-weight: 600; }
+    .verdict-badge {
+      padding: 4px 14px; border-radius: 6px; font-weight: 700; font-size: 0.9rem;
+      font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
+    }
+    .verdict-buy { background: rgba(45, 157, 92, 0.2); color: var(--green); border: 1px solid rgba(45, 157, 92, 0.3); }
+    .verdict-hold { background: rgba(201, 154, 46, 0.2); color: var(--amber); border: 1px solid rgba(201, 154, 46, 0.3); }
+    .verdict-sell { background: rgba(201, 64, 64, 0.2); color: var(--red); border: 1px solid rgba(201, 64, 64, 0.3); }
+    .verdict-meter { height: 8px; border-radius: 4px; background: var(--border); margin: 10px 0 6px; position: relative; overflow: hidden; }
+    .verdict-meter-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+    .verdict-factors { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 10px; }
+    .verdict-factor {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.75rem; padding: 5px 8px; border-radius: 6px; background: var(--card);
+    }
+    .verdict-factor .f-label { color: var(--muted); }
+    .verdict-factor .f-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+    .verdict-factor .f-pos { color: var(--green); }
+    .verdict-factor .f-neg { color: var(--red); }
+    .verdict-factor .f-neu { color: var(--amber); }
+    .analyst-consensus { display: flex; gap: 12px; margin: 10px 0; flex-wrap: wrap; }
+    .consensus-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; flex: 1; min-width: 150px; }
+    .consensus-bar .cb-buy { background: var(--green); }
+    .consensus-bar .cb-hold { background: var(--amber); }
+    .consensus-bar .cb-sell { background: var(--red); }
+
+    /* Analyst Trend */
+    .trend-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0; }
+    .trend-col { text-align: center; }
+    .trend-col .t-period { font-size: 0.65rem; color: var(--dim); margin-bottom: 4px; text-transform: uppercase; }
+    .trend-bar-stack { display: flex; flex-direction: column; gap: 2px; }
+    .trend-seg {
+      height: 6px; border-radius: 3px; min-width: 4px; transition: width 0.4s ease;
+    }
+    .trend-counts { font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+    .earnings-est-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
+    .est-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+      text-align: center;
+    }
+    .est-card .est-period { font-size: 0.65rem; color: var(--dim); text-transform: uppercase; }
+    .est-card .est-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 0.85rem; margin: 2px 0; }
+    .est-card .est-range { font-size: 0.6rem; color: var(--muted); }
+
+    /* Peer Comparison */
+    .peer-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin-top: 8px; }
+    .peer-table th {
+      text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500;
+      border-bottom: 1px solid var(--border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .peer-table td { padding: 6px 8px; border-bottom: 1px solid rgba(31,41,55,0.5); }
+    .peer-table tr:hover { background: rgba(31,41,55,0.3); }
+    .peer-table tr.peer-current { background: rgba(224,112,40,0.1); }
+    .peer-table .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* CSV Export */
+    .export-btn {
+      padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--card); color: var(--muted); cursor: pointer; font-size: 0.75rem;
+      transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .export-btn:hover { border-color: var(--orange); color: var(--text); }
+
+    /* Custom Screener */
+    .screener-builder {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px; margin: 12px 20px;
+    }
+    .screener-builder-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .screener-builder-header h3 { font-size: 0.9rem; font-weight: 600; }
+    .screener-rules { display: flex; flex-direction: column; gap: 8px; }
+    .screener-rule {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    }
+    .screener-rule select, .screener-rule input {
+      padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 0.8rem; outline: none;
+    }
+    .screener-rule select:focus, .screener-rule input:focus { border-color: var(--orange); }
+    .screener-rule .remove-rule {
+      background: none; border: none; color: var(--red); cursor: pointer; font-size: 1rem; padding: 2px 6px;
+    }
+
+    /* Chart */
+    .chart-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+    .chart-tab {
+      padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--muted); cursor: pointer; font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace; transition: all 0.2s;
+    }
+    .chart-tab:hover { border-color: var(--orange); color: var(--text); }
+    .chart-tab.active { background: var(--orange); border-color: var(--orange); color: #000; font-weight: 600; }
+    .chart-container {
+      position: relative; width: 100%; height: 220px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px; margin-bottom: 16px;
+    }
+    .chart-loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 220px; color: var(--dim); font-size: 0.85rem;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ─── CONFIG ───
+    const SUPABASE_URL = "YOUR_SUPABASE_URL";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+    const API_BASE = "";  // empty for same-origin; set to full URL for local dev with separate server
+
+    // ─── SUPABASE ───
+    let sb = null;
+    let sbOk = false;
+    try {
+      if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY") {
+        sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        sbOk = true;
+      }
+    } catch(e) { console.warn("Supabase init failed:", e); }
+
+    // ─── HELPERS ───
+    const fmt = (n, d=2) => (n == null || isNaN(n)) ? "—" : Number(n).toFixed(d);
+    const fmtPct = (n) => (n == null || isNaN(n)) ? "—" : (n * 100).toFixed(1) + "%";
+    const fmtCr = (n) => {
+      if (n == null || isNaN(n)) return "—";
+      const cr = n / 1e7;
+      if (cr >= 1e5) return (cr / 1e5).toFixed(1) + "L Cr";
+      if (cr >= 1e3) return (cr / 1e3).toFixed(1) + "K Cr";
+      return cr.toFixed(0) + " Cr";
+    };
+    const fmtPrice = (n) => (n == null || isNaN(n)) ? "—" : "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    const fmtVol = (n) => {
+      if (n == null || isNaN(n)) return "—";
+      if (n >= 1e7) return (n / 1e7).toFixed(1) + " Cr";
+      if (n >= 1e5) return (n / 1e5).toFixed(1) + " L";
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+      return n.toString();
+    };
+    const scoreColor = (s) => s >= 65 ? "var(--green)" : s >= 40 ? "var(--amber)" : "var(--red)";
+    const peColor = (pe) => pe == null ? "var(--muted)" : pe < 20 ? "var(--green)" : pe > 50 ? "var(--red)" : "var(--text)";
+    const chgBadge = (pct) => {
+      if (pct == null) return "";
+      const cls = pct >= 0 ? "badge-green" : "badge-red";
+      const sign = pct >= 0 ? "+" : "";
+      return React.createElement("span", { className: `badge ${cls} mono` }, sign + pct.toFixed(2) + "%");
+    };
+
+    // ─── CSV EXPORT ───
+    function exportCSV(stocks) {
+      const headers = ["Ticker","Company","Industry","Price","Change%","Score","P/E","P/B","Div Yield%","Market Cap","52W Position%"];
+      const rows = stocks.map(s => [
+        s.ticker.replace(".NS",""), s.name, s.industry || "",
+        s.price || "", s.changePct != null ? s.changePct.toFixed(2) : "",
+        s.score || "", s.pe != null ? s.pe.toFixed(1) : "", s.pb != null ? s.pb.toFixed(1) : "",
+        s.divYield != null ? s.divYield.toFixed(2) : "", s.mcap || "",
+        s.pos52 != null ? s.pos52.toFixed(0) : "",
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "nse_screener_" + new Date().toISOString().slice(0,10) + ".csv";
+      a.click(); URL.revokeObjectURL(url);
+    }
+
+    // ─── COMPOSITE SCORE ───
+    function calcScore(s) {
+      let sc = 0;
+      if (s.pe != null) { if (s.pe < 15) sc += 20; else if (s.pe < 25) sc += 12; else if (s.pe < 40) sc += 5; }
+      if (s.pb != null) { if (s.pb < 2) sc += 8; else if (s.pb < 4) sc += 4; }
+      if (s.divYield != null) { if (s.divYield > 3) sc += 10; else if (s.divYield > 1.5) sc += 5; }
+      if (s.abv200) sc += 12;
+      if (s.abv50) sc += 6;
+      if (s.pos52 != null) { if (s.pos52 >= 60 && s.pos52 <= 90) sc += 10; else if (s.pos52 >= 40 && s.pos52 < 60) sc += 5; }
+      if (s.volume && s.avgVolume && s.volume > s.avgVolume * 1.2) sc += 4;
+      return Math.min(sc, 100);
+    }
+
+    // ─── CUSTOM SCREENER FIELDS ───
+    const SCREENER_FIELDS = {
+      "P/E": s => s.pe,
+      "P/B": s => s.pb,
+      "Div Yield %": s => s.divYield,
+      "Score": s => s.score,
+      "Market Cap (Cr)": s => s.mcap ? s.mcap / 1e7 : null,
+      "Price": s => s.price,
+      "Change %": s => s.changePct,
+      "52W Position %": s => s.pos52,
+      "Volume": s => s.volume,
+    };
+    const SCREENER_FIELD_NAMES = Object.keys(SCREENER_FIELDS);
+    const SCREENER_OPS = [">", ">=", "<", "<=", "="];
+
+    // ─── SCREENER CHIPS ───
+    const SCREENERS = [
+      { id: "value", label: "Value", icon: "💎", desc: "P/E < 20 AND P/B < 4", fn: s => s.pe != null && s.pe < 20 && s.pb != null && s.pb < 4 },
+      { id: "momentum", label: "Momentum", icon: "🚀", desc: "Above 50 & 200 DMA, 52w position > 65%", fn: s => s.abv50 && s.abv200 && s.pos52 > 65 },
+      { id: "dividends", label: "Dividends", icon: "🤑", desc: "Dividend yield > 2%", fn: s => s.divYield != null && s.divYield > 2 },
+      { id: "oversold", label: "Oversold", icon: "📉", desc: "Bottom 25% of 52-week range", fn: s => s.pos52 != null && s.pos52 < 25 },
+      { id: "megacap", label: "Mega Cap", icon: "🏛️", desc: "Market cap > ₹5 lakh crore", fn: s => s.mcap > 5e12 },
+      { id: "growth", label: "Growth", icon: "📈", desc: "Forward P/E < Trailing P/E and above 200 DMA", fn: s => s.forwardPe != null && s.pe != null && s.forwardPe < s.pe && s.abv200 },
+    ];
+
+    // ─── WATCHLIST HELPERS ───
+    async function loadWatchlist(username) {
+      if (sbOk) {
+        try {
+          const { data } = await sb.from("watchlists").select("ticker").eq("username", username);
+          if (data) return data.map(r => r.ticker);
+        } catch(e) { console.warn("Supabase read failed, using localStorage"); }
+      }
+      const raw = localStorage.getItem("wl_" + username);
+      return raw ? JSON.parse(raw) : [];
+    }
+
+    async function saveWatchlist(username, tickers) {
+      localStorage.setItem("wl_" + username, JSON.stringify(tickers));
+      // Supabase sync is done per-toggle, localStorage is the snapshot
+    }
+
+    async function toggleWatchlistItem(username, ticker, add) {
+      if (sbOk) {
+        try {
+          if (add) {
+            await sb.from("watchlists").upsert({ username, ticker }, { onConflict: "username,ticker" });
+          } else {
+            await sb.from("watchlists").delete().eq("username", username).eq("ticker", ticker);
+          }
+        } catch(e) { console.warn("Supabase toggle failed"); }
+      }
+    }
+
+    // ─── APP ───
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    function App() {
+      const [user, setUser] = useState(localStorage.getItem("nse_user") || "");
+      const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("nse_user"));
+      const [stocks, setStocks] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [updatedAt, setUpdatedAt] = useState(null);
+      const [search, setSearch] = useState("");
+      const [sortCol, setSortCol] = useState("score");
+      const [sortDir, setSortDir] = useState(-1);
+      const [activeChip, setActiveChip] = useState(null);
+      const [showFilters, setShowFilters] = useState(false);
+      const [filters, setFilters] = useState({ maxPe: "", maxPb: "", minDiv: "", minMcap: "" });
+      const [watchlist, setWatchlist] = useState([]);
+      const [showWatchlist, setShowWatchlist] = useState(false);
+      const [detailTicker, setDetailTicker] = useState(null);
+      const [showAddTicker, setShowAddTicker] = useState(false);
+      const [customTickers, setCustomTickers] = useState(() => {
+        const raw = localStorage.getItem("nse_custom_tickers");
+        return raw ? JSON.parse(raw) : [];
+      });
+      const [news, setNews] = useState([]);
+      const [newsLoading, setNewsLoading] = useState(true);
+      const [sectors, setSectors] = useState([]);
+      const [industries, setIndustries] = useState([]);
+      const [filterSector, setFilterSector] = useState("");
+      const [filterIndustry, setFilterIndustry] = useState("");
+      const [totalTickers, setTotalTickers] = useState(0);
+      const [loadingMsg, setLoadingMsg] = useState("Connecting to NSE...");
+      const [showScreener, setShowScreener] = useState(false);
+      const [screenerRules, setScreenerRules] = useState([]);
+
+      // Login
+      const doLogin = () => {
+        if (!user.trim()) return;
+        localStorage.setItem("nse_user", user.trim());
+        setLoggedIn(true);
+      };
+
+      const doLogout = () => {
+        localStorage.removeItem("nse_user");
+        setLoggedIn(false);
+        setUser("");
+        setWatchlist([]);
+      };
+
+      // Fetch stocks — full NSE universe
+      const fetchStocks = useCallback(async () => {
+        setLoading(true);
+        setLoadingMsg("Fetching all NSE stocks from Yahoo Finance... (this may take 30-60s for 2000+ stocks)");
+        try {
+          let url = API_BASE + "/api/stocks?mode=all";
+          if (customTickers.length > 0) {
+            url += "&tickers=" + customTickers.map(t => t + ".NS").join(",");
+          }
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.stocks) {
+            const scored = data.stocks.map(s => ({ ...s, score: calcScore(s) }));
+            setStocks(scored);
+            setUpdatedAt(data.updatedAt);
+            setTotalTickers(data.totalTickers || scored.length);
+            if (data.sectors) setSectors(data.sectors);
+            if (data.industries) setIndustries(data.industries);
+          }
+        } catch(e) { console.error("Fetch stocks error:", e); }
+        setLoading(false);
+      }, [customTickers]);
+
+      // Fetch news
+      const fetchNews = useCallback(async () => {
+        setNewsLoading(true);
+        try {
+          const res = await fetch(API_BASE + "/api/news?q=NSE+India+stock+market&limit=5");
+          const data = await res.json();
+          if (data.articles) setNews(data.articles);
+        } catch(e) { console.error("Fetch news error:", e); }
+        setNewsLoading(false);
+      }, []);
+
+      useEffect(() => {
+        if (loggedIn) {
+          fetchStocks();
+          fetchNews();
+          loadWatchlist(user).then(setWatchlist);
+        }
+      }, [loggedIn, fetchStocks, fetchNews]);
+
+      // Toggle watchlist
+      const toggleStar = async (ticker) => {
+        const isIn = watchlist.includes(ticker);
+        const next = isIn ? watchlist.filter(t => t !== ticker) : [...watchlist, ticker];
+        setWatchlist(next);
+        saveWatchlist(user, next);
+        toggleWatchlistItem(user, ticker, !isIn);
+      };
+
+      // Sorting
+      const handleSort = (col) => {
+        if (sortCol === col) setSortDir(d => -d);
+        else { setSortCol(col); setSortDir(-1); }
+      };
+
+      // Filtered + sorted stocks
+      const displayed = useMemo(() => {
+        let list = [...stocks];
+
+        // Search
+        if (search) {
+          const q = search.toLowerCase();
+          list = list.filter(s =>
+            s.ticker.toLowerCase().includes(q) ||
+            s.name.toLowerCase().includes(q) ||
+            (s.sector || "").toLowerCase().includes(q) ||
+            (s.industry || "").toLowerCase().includes(q)
+          );
+        }
+
+        // Industry filter
+        if (filterIndustry) {
+          list = list.filter(s => s.industry === filterIndustry);
+        }
+
+        // Watchlist filter
+        if (showWatchlist) {
+          list = list.filter(s => watchlist.includes(s.ticker));
+        }
+
+        // Screener chip
+        if (activeChip) {
+          const sc = SCREENERS.find(c => c.id === activeChip);
+          if (sc) list = list.filter(sc.fn);
+        }
+
+        // Custom filters
+        if (filters.maxPe) list = list.filter(s => s.pe != null && s.pe <= Number(filters.maxPe));
+        if (filters.maxPb) list = list.filter(s => s.pb != null && s.pb <= Number(filters.maxPb));
+        if (filters.minDiv) list = list.filter(s => s.divYield != null && s.divYield >= Number(filters.minDiv));
+        if (filters.minMcap) list = list.filter(s => s.mcap >= Number(filters.minMcap) * 1e11);
+
+        // Custom screener rules
+        for (const rule of screenerRules) {
+          if (!rule.field || !rule.op || rule.val === "") continue;
+          const v = Number(rule.val);
+          if (isNaN(v)) continue;
+          const getter = SCREENER_FIELDS[rule.field];
+          if (!getter) continue;
+          list = list.filter(s => {
+            const sv = getter(s);
+            if (sv == null) return false;
+            if (rule.op === ">") return sv > v;
+            if (rule.op === "<") return sv < v;
+            if (rule.op === ">=") return sv >= v;
+            if (rule.op === "<=") return sv <= v;
+            if (rule.op === "=") return Math.abs(sv - v) < 0.01;
+            return true;
+          });
+        }
+
+        // Sort
+        list.sort((a, b) => {
+          let va = a[sortCol], vb = b[sortCol];
+          if (va == null) va = -Infinity;
+          if (vb == null) vb = -Infinity;
+          if (typeof va === "string") return sortDir * va.localeCompare(vb);
+          return sortDir * (va - vb);
+        });
+
+        return list;
+      }, [stocks, search, showWatchlist, watchlist, activeChip, filters, filterIndustry, sortCol, sortDir, screenerRules]);
+
+      // Top picks
+      const topPicks = useMemo(() => {
+        return [...stocks].sort((a, b) => b.score - a.score).slice(0, 5);
+      }, [stocks]);
+
+      if (!loggedIn) {
+        return React.createElement(LoginScreen, { user, setUser, doLogin });
+      }
+
+      return React.createElement("div", null,
+        // Header
+        React.createElement("header", { className: "header" },
+          React.createElement("h1", null, "NSE Screener"),
+          React.createElement("span", { className: "live-dot" }),
+          updatedAt && React.createElement("span", { style: { fontSize: "0.72rem", color: "var(--dim)" } },
+            "Updated " + new Date(updatedAt).toLocaleTimeString("en-IN")
+          ),
+          React.createElement("div", { className: "header-right" },
+            React.createElement("span", { style: { fontSize: "0.82rem", color: "var(--muted)" } }, user),
+            React.createElement("button", { className: "btn btn-sm", onClick: () => setShowAddTicker(true) }, "+ Ticker"),
+            React.createElement("button", {
+              className: `btn btn-sm ${showWatchlist ? "btn-primary" : ""}`,
+              onClick: () => setShowWatchlist(!showWatchlist)
+            }, `★ ${watchlist.length}`),
+            React.createElement("button", { className: "btn btn-sm", onClick: () => setShowFilters(!showFilters) }, "⚙ Filters"),
+            React.createElement("button", { className: "btn btn-sm", onClick: () => setShowScreener(!showScreener) }, "🔍 Screener"),
+            React.createElement("button", { className: "export-btn", onClick: () => exportCSV(displayed) }, "⬇ CSV"),
+            React.createElement("button", { className: "btn btn-sm", onClick: () => fetchStocks() }, "↻"),
+            React.createElement("button", { className: "btn btn-sm", onClick: doLogout }, "Logout"),
+          ),
+        ),
+
+        // Search bar with button
+        React.createElement("div", { style: { padding: "12px 20px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
+          React.createElement("div", { style: { flex: "1 1 280px", position: "relative", display: "flex", gap: 6 } },
+            React.createElement("input", {
+              className: "search-bar",
+              placeholder: "Search by ticker, company, sector, or industry...",
+              value: search,
+              onChange: e => setSearch(e.target.value),
+              style: { flex: 1 },
+            }),
+            React.createElement("button", {
+              className: "btn btn-primary",
+              onClick: () => { /* search is live, but button gives visual feedback */ },
+              style: { borderRadius: 8, padding: "8px 16px" },
+            }, "🔍 Search"),
+          ),
+          !loading && React.createElement("div", { className: "stock-count" },
+            React.createElement("strong", null, displayed.length),
+            " of ",
+            React.createElement("strong", null, stocks.length),
+            " stocks",
+          ),
+        ),
+
+        // Industry filter row
+        industries.length > 0 && React.createElement("div", {
+          style: { padding: "0 20px 8px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }
+        },
+          React.createElement("div", { className: "filter-group", style: { margin: 0, minWidth: 240 } },
+            React.createElement("label", null, "Industry"),
+            React.createElement("select", {
+              value: filterIndustry,
+              onChange: e => setFilterIndustry(e.target.value),
+            },
+              React.createElement("option", { value: "" }, "All Industries (" + industries.length + ")"),
+              industries.map(s => React.createElement("option", { key: s, value: s }, s)),
+            ),
+          ),
+          filterIndustry && React.createElement("button", {
+            className: "btn btn-sm",
+            onClick: () => setFilterIndustry(""),
+            style: { marginTop: 16 },
+          }, "✕ Clear"),
+        ),
+
+        // Filters
+        showFilters && React.createElement("div", { className: "filters-panel fade-in" },
+          React.createElement("div", { className: "filter-group" },
+            React.createElement("label", null, "Max P/E"),
+            React.createElement("input", { type: "number", value: filters.maxPe, onChange: e => setFilters({...filters, maxPe: e.target.value}), placeholder: "e.g. 25" }),
+          ),
+          React.createElement("div", { className: "filter-group" },
+            React.createElement("label", null, "Max P/B"),
+            React.createElement("input", { type: "number", value: filters.maxPb, onChange: e => setFilters({...filters, maxPb: e.target.value}), placeholder: "e.g. 4" }),
+          ),
+          React.createElement("div", { className: "filter-group" },
+            React.createElement("label", null, "Min Dividend Yield %"),
+            React.createElement("input", { type: "number", value: filters.minDiv, onChange: e => setFilters({...filters, minDiv: e.target.value}), placeholder: "e.g. 2" }),
+          ),
+          React.createElement("div", { className: "filter-group" },
+            React.createElement("label", null, "Min Market Cap (₹K Cr)"),
+            React.createElement("input", { type: "number", value: filters.minMcap, onChange: e => setFilters({...filters, minMcap: e.target.value}), placeholder: "e.g. 100" }),
+          ),
+          React.createElement("div", { style: { display: "flex", alignItems: "flex-end" } },
+            React.createElement("button", { className: "btn btn-sm", onClick: () => { setFilters({ maxPe: "", maxPb: "", minDiv: "", minMcap: "" }); setFilterSector(""); setFilterIndustry(""); } }, "Clear All"),
+          ),
+        ),
+
+        // Custom Screener Builder
+        showScreener && React.createElement("div", { className: "screener-builder fade-in" },
+          React.createElement("div", { className: "screener-builder-header" },
+            React.createElement("h3", null, "🔍 Custom Screener"),
+            React.createElement("div", { style: { display: "flex", gap: 6 } },
+              React.createElement("button", { className: "btn btn-sm",
+                onClick: () => setScreenerRules([...screenerRules, { field: "", op: ">", val: "" }])
+              }, "+ Add Rule"),
+              screenerRules.length > 0 && React.createElement("button", { className: "btn btn-sm",
+                onClick: () => setScreenerRules([])
+              }, "Clear"),
+            ),
+          ),
+          screenerRules.length === 0
+            ? React.createElement("div", { style: { color: "var(--dim)", fontSize: "0.82rem" } },
+                "Build custom filters: e.g. P/E < 15 AND Score > 50. Click \"+ Add Rule\" to start."
+              )
+            : React.createElement("div", { className: "screener-rules" },
+                screenerRules.map((rule, i) =>
+                  React.createElement("div", { key: i, className: "screener-rule" },
+                    i > 0 && React.createElement("span", { style: { color: "var(--orange)", fontWeight: 600, fontSize: "0.75rem" } }, "AND"),
+                    React.createElement("select", {
+                      value: rule.field,
+                      onChange: e => { const r = [...screenerRules]; r[i] = {...r[i], field: e.target.value}; setScreenerRules(r); }
+                    },
+                      React.createElement("option", { value: "" }, "Select field..."),
+                      SCREENER_FIELD_NAMES.map(f => React.createElement("option", { key: f, value: f }, f)),
+                    ),
+                    React.createElement("select", {
+                      value: rule.op,
+                      onChange: e => { const r = [...screenerRules]; r[i] = {...r[i], op: e.target.value}; setScreenerRules(r); }
+                    },
+                      SCREENER_OPS.map(op => React.createElement("option", { key: op, value: op }, op)),
+                    ),
+                    React.createElement("input", {
+                      type: "number", placeholder: "Value", style: { width: 80 },
+                      value: rule.val,
+                      onChange: e => { const r = [...screenerRules]; r[i] = {...r[i], val: e.target.value}; setScreenerRules(r); }
+                    }),
+                    React.createElement("button", {
+                      className: "remove-rule",
+                      onClick: () => setScreenerRules(screenerRules.filter((_, j) => j !== i))
+                    }, "×"),
+                  )
+                ),
+              ),
+        ),
+
+        // News — hide when searching so results show immediately
+        !showWatchlist && !search && !filterIndustry && React.createElement("div", { className: "news-section fade-in" },
+          React.createElement("h3", null, "📰 Market News"),
+          newsLoading
+            ? React.createElement("div", { className: "news-grid" },
+                Array.from({ length: 5 }).map((_, i) =>
+                  React.createElement("div", { key: i, className: "skeleton", style: { height: 72 } })
+                )
+              )
+            : React.createElement("div", { className: "news-grid" },
+                news.map((a, i) =>
+                  React.createElement("a", { key: i, href: a.link, target: "_blank", rel: "noopener", className: "news-card" },
+                    React.createElement("div", { className: "title" }, a.title),
+                    React.createElement("div", { className: "meta" },
+                      React.createElement("span", null, a.source),
+                      React.createElement("span", null, a.timeAgo),
+                    ),
+                  )
+                )
+              ),
+        ),
+
+        // Top Picks — hide when searching
+        !showWatchlist && !search && !filterIndustry && stocks.length > 0 && React.createElement("div", { className: "top-picks fade-in" },
+          React.createElement("h3", null, "🏆 Top 5 Picks"),
+          React.createElement("div", { className: "picks-row" },
+            topPicks.map((s, i) =>
+              React.createElement("div", {
+                key: s.ticker, className: "pick-card", style: { cursor: "pointer" },
+                onClick: () => setDetailTicker(s.ticker)
+              },
+                React.createElement("div", { className: "pick-name" }, s.name.substring(0, 20)),
+                React.createElement("div", { className: "pick-ticker mono" }, s.ticker.replace(".NS", "")),
+                React.createElement("div", { className: "pick-row" },
+                  React.createElement("span", { className: "mono" }, fmtPrice(s.price)),
+                  chgBadge(s.changePct),
+                ),
+                React.createElement("div", { className: "score-bar" },
+                  React.createElement("div", { className: "score-fill", style: { width: s.score + "%", background: scoreColor(s.score) } }),
+                ),
+                React.createElement("div", { style: { fontSize: "0.75rem", color: scoreColor(s.score), textAlign: "right" } }, "Score: " + s.score),
+              )
+            )
+          ),
+        ),
+
+        // Screener Chips
+        React.createElement("div", { className: "chips" },
+          SCREENERS.map(sc =>
+            React.createElement("button", {
+              key: sc.id,
+              className: `chip ${activeChip === sc.id ? "active" : ""}`,
+              onClick: () => setActiveChip(activeChip === sc.id ? null : sc.id),
+            }, sc.icon + " " + sc.label)
+          )
+        ),
+        activeChip && React.createElement("div", { className: "chip-desc" },
+          SCREENERS.find(c => c.id === activeChip)?.desc
+        ),
+
+        // Loading
+        loading
+          ? React.createElement("div", { style: { padding: "40px 20px", textAlign: "center" } },
+              React.createElement("div", { className: "pulse", style: { fontSize: "1.1rem", color: "var(--muted)" } }, loadingMsg),
+              React.createElement("div", { style: { marginTop: 12, fontSize: "0.8rem", color: "var(--dim)" } }, "Fetching live data for 2000+ NSE stocks in batches..."),
+              React.createElement("div", { className: "progress-bar", style: { maxWidth: 300, margin: "16px auto" } },
+                React.createElement("div", { className: "progress-fill pulse", style: { width: "60%" } }),
+              ),
+            )
+          : React.createElement(React.Fragment, null,
+              // Table
+              React.createElement("div", { className: "table-wrap fade-in" },
+                React.createElement("table", null,
+                  React.createElement("thead", null,
+                    React.createElement("tr", null,
+                      React.createElement("th", { style: { width: 36 } }, ""),
+                      ...[
+                        ["name", "Company"], ["industry", "Industry"],
+                        ["price", "Price"], ["changePct", "Chg%"],
+                        ["score", "Score"], ["pe", "P/E"], ["pb", "P/B"],
+                        ["divYield", "Div%"], ["mcap", "MCap"], ["pos52", "52w Pos"],
+                      ].map(([col, label]) =>
+                        React.createElement("th", { key: col, onClick: () => handleSort(col) },
+                          label,
+                          sortCol === col && React.createElement("span", { className: "sort-arrow" }, sortDir > 0 ? "▲" : "▼"),
+                        )
+                      ),
+                    ),
+                  ),
+                  React.createElement("tbody", null,
+                    displayed.map(s =>
+                      React.createElement("tr", { key: s.ticker, onClick: () => setDetailTicker(s.ticker) },
+                        React.createElement("td", { onClick: e => { e.stopPropagation(); toggleStar(s.ticker); } },
+                          React.createElement("button", { className: "star-btn" }, watchlist.includes(s.ticker) ? "★" : "☆"),
+                        ),
+                        React.createElement("td", null,
+                          React.createElement("div", { style: { fontWeight: 600 } }, s.name.substring(0, 22)),
+                          React.createElement("div", { style: { fontSize: "0.7rem", color: "var(--dim)" } }, s.ticker.replace(".NS", "")),
+                        ),
+                        React.createElement("td", null, s.industry ? React.createElement("span", { className: "industry-tag", title: s.industry }, s.industry) : "—"),
+                        React.createElement("td", { className: "mono" }, fmtPrice(s.price)),
+                        React.createElement("td", null, chgBadge(s.changePct)),
+                        React.createElement("td", null,
+                          React.createElement("span", { className: "mono", style: { color: scoreColor(s.score) } }, s.score),
+                        ),
+                        React.createElement("td", { className: "mono", style: { color: peColor(s.pe) } }, fmt(s.pe, 1)),
+                        React.createElement("td", { className: "mono" }, fmt(s.pb, 1)),
+                        React.createElement("td", { className: "mono" }, s.divYield != null ? s.divYield.toFixed(1) + "%" : "—"),
+                        React.createElement("td", { className: "mono", style: { fontSize: "0.78rem" } }, fmtCr(s.mcap)),
+                        React.createElement("td", null,
+                          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                            React.createElement("div", { className: "range-bar" },
+                              React.createElement("div", { className: "range-dot", style: { left: Math.min(100, Math.max(0, s.pos52)) + "%" } }),
+                            ),
+                            React.createElement("span", { className: "mono", style: { fontSize: "0.72rem", color: "var(--dim)", minWidth: 32 } }, Math.round(s.pos52) + "%"),
+                          ),
+                        ),
+                      )
+                    ),
+                    displayed.length === 0 && React.createElement("tr", null,
+                      React.createElement("td", { colSpan: 11, style: { textAlign: "center", padding: 24, color: "var(--dim)" } }, "No stocks match your filters"),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Score Legend
+              React.createElement("div", { className: "legend" },
+                "Score weights: P/E<15 = 20pts, <25 = 12pts, <40 = 5pts | P/B<2 = 8pts, <4 = 4pts | Div>3% = 10pts, >1.5% = 5pts | Above 200DMA = 12pts | Above 50DMA = 6pts | 52w 60-90% = 10pts, 40-60% = 5pts | Vol>1.2x avg = 4pts | Max 100"
+              ),
+            ),
+
+        // Detail Modal
+        detailTicker && React.createElement(DetailModal, {
+          ticker: detailTicker,
+          onClose: () => setDetailTicker(null),
+          watchlist,
+          toggleStar,
+          allStocks: stocks,
+        }),
+
+        // Add Ticker Modal
+        showAddTicker && React.createElement(AddTickerModal, {
+          onClose: () => setShowAddTicker(false),
+          onAdd: (ticker) => {
+            const clean = ticker.toUpperCase().replace(".NS", "");
+            if (!customTickers.includes(clean)) {
+              const next = [...customTickers, clean];
+              setCustomTickers(next);
+              localStorage.setItem("nse_custom_tickers", JSON.stringify(next));
+            }
+            setShowAddTicker(false);
+            setDetailTicker(ticker.toUpperCase().endsWith(".NS") ? ticker.toUpperCase() : ticker.toUpperCase() + ".NS");
+            fetchStocks();
+          },
+        }),
+      );
+    }
+
+    // ─── LOGIN SCREEN ───
+    function LoginScreen({ user, setUser, doLogin }) {
+      return React.createElement("div", { className: "login-screen" },
+        React.createElement("div", { className: "login-box fade-in" },
+          React.createElement("h1", null, "NSE Screener"),
+          React.createElement("p", null, "Live screener for 2000+ NSE stocks with fundamentals, scoring, industry filters & news"),
+          React.createElement("input", {
+            placeholder: "Enter your name",
+            value: user,
+            onChange: e => setUser(e.target.value),
+            onKeyDown: e => e.key === "Enter" && doLogin(),
+            autoFocus: true,
+          }),
+          React.createElement("button", { className: "btn btn-primary", style: { width: "100%" }, onClick: doLogin }, "Enter"),
+          React.createElement("div", { className: "sb-status" },
+            sbOk
+              ? React.createElement("span", { style: { color: "var(--green)" } }, "● Supabase connected")
+              : React.createElement("span", { style: { color: "var(--amber)" } }, "⚠ Supabase not configured — watchlist will use localStorage"),
+          ),
+        ),
+      );
+    }
+
+    // ─── STOCK CHART ───
+    const CHART_PERIODS = [
+      { id: "1h", label: "1H" },
+      { id: "24h", label: "24H" },
+      { id: "7d", label: "7D" },
+      { id: "1m", label: "1M" },
+      { id: "3m", label: "3M" },
+      { id: "1y", label: "1Y" },
+      { id: "all", label: "ALL" },
+    ];
+
+    function StockChart({ ticker }) {
+      const [period, setPeriod] = useState("24h");
+      const [chartData, setChartData] = useState(null);
+      const [chartLoading, setChartLoading] = useState(true);
+      const canvasRef = useRef(null);
+      const chartRef = useRef(null);
+
+      useEffect(() => {
+        setChartLoading(true);
+        fetch(API_BASE + "/api/chart?ticker=" + encodeURIComponent(ticker) + "&period=" + period)
+          .then(r => r.json())
+          .then(d => {
+            if (d.points) setChartData(d);
+            else setChartData(null);
+          })
+          .catch(() => setChartData(null))
+          .finally(() => setChartLoading(false));
+      }, [ticker, period]);
+
+      useEffect(() => {
+        if (!chartData || !canvasRef.current) return;
+
+        // Destroy previous chart
+        if (chartRef.current) {
+          chartRef.current.destroy();
+          chartRef.current = null;
+        }
+
+        const pts = chartData.points;
+        if (pts.length === 0) return;
+
+        const labels = pts.map(p => {
+          const d = new Date(p.t);
+          if (period === "1h" || period === "24h") return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+          if (period === "7d" || period === "1m") return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+          if (period === "all") return d.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+          return d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+        });
+
+        const prices = pts.map(p => p.p);
+        const firstPrice = prices[0];
+        const lastPrice = prices[prices.length - 1];
+        const isUp = lastPrice >= firstPrice;
+        const lineColor = isUp ? "#22c55e" : "#ef4444";
+        const fillColor = isUp ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)";
+
+        const ctx = canvasRef.current.getContext("2d");
+        chartRef.current = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [{
+              data: prices,
+              borderColor: lineColor,
+              backgroundColor: fillColor,
+              borderWidth: 2,
+              fill: true,
+              tension: 0.3,
+              pointRadius: 0,
+              pointHitRadius: 8,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: "#0f172a",
+                borderColor: "#1e293b",
+                borderWidth: 1,
+                titleFont: { family: "JetBrains Mono" },
+                bodyFont: { family: "JetBrains Mono" },
+                callbacks: {
+                  label: (ctx) => "₹" + ctx.parsed.y.toLocaleString("en-IN"),
+                },
+              },
+            },
+            scales: {
+              x: {
+                display: true,
+                grid: { color: "rgba(30,41,59,0.5)" },
+                ticks: { color: "#64748b", font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0 },
+              },
+              y: {
+                display: true,
+                position: "right",
+                grid: { color: "rgba(30,41,59,0.5)" },
+                ticks: {
+                  color: "#64748b",
+                  font: { size: 10, family: "JetBrains Mono" },
+                  callback: (v) => "₹" + v.toLocaleString("en-IN"),
+                },
+              },
+            },
+          },
+        });
+
+        return () => {
+          if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+        };
+      }, [chartData, period]);
+
+      const pctChange = chartData && chartData.points.length > 1
+        ? ((chartData.points[chartData.points.length - 1].p - chartData.points[0].p) / chartData.points[0].p * 100)
+        : null;
+
+      return React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+          React.createElement("div", { className: "section-title", style: { margin: 0, border: "none", paddingBottom: 0 } }, "Price Chart"),
+          pctChange != null && React.createElement("span", {
+            className: `badge ${pctChange >= 0 ? "badge-green" : "badge-red"} mono`,
+            style: { fontSize: "0.8rem" },
+          }, (pctChange >= 0 ? "+" : "") + pctChange.toFixed(2) + "% this period"),
+        ),
+        React.createElement("div", { className: "chart-tabs" },
+          CHART_PERIODS.map(p =>
+            React.createElement("button", {
+              key: p.id,
+              className: `chart-tab ${period === p.id ? "active" : ""}`,
+              onClick: () => setPeriod(p.id),
+            }, p.label)
+          ),
+        ),
+        chartLoading
+          ? React.createElement("div", { className: "chart-loading pulse" }, "Loading chart...")
+          : !chartData || chartData.points.length === 0
+            ? React.createElement("div", { className: "chart-loading" }, "No chart data available")
+            : React.createElement("div", { className: "chart-container" },
+                React.createElement("canvas", { ref: canvasRef }),
+              ),
+      );
+    }
+
+    // ─── STOCK ANALYSIS ENGINE ───
+    function analyzeStock(d) {
+      if (!d) return null;
+      const factors = [];
+      let total = 0, maxTotal = 0;
+
+      // Helper: add a scored factor
+      const add = (label, score, max, sentiment) => {
+        factors.push({ label, score, max, sentiment });
+        total += score;
+        maxTotal += max;
+      };
+
+      // 1. Valuation (max 25 pts)
+      const pe = d.pe;
+      if (pe != null && !isNaN(pe) && pe > 0) {
+        const s = pe < 15 ? 10 : pe < 25 ? 7 : pe < 40 ? 4 : 1;
+        add("P/E Ratio", s, 10, s >= 7 ? "pos" : s >= 4 ? "neu" : "neg");
+      }
+      const pb = d.pb;
+      if (pb != null && !isNaN(pb) && pb > 0) {
+        const s = pb < 2 ? 8 : pb < 4 ? 5 : pb < 8 ? 3 : 1;
+        add("P/B Ratio", s, 8, s >= 5 ? "pos" : s >= 3 ? "neu" : "neg");
+      }
+      const pegR = d.pegRatio;
+      if (pegR != null && !isNaN(pegR)) {
+        const s = pegR < 1 ? 7 : pegR < 2 ? 4 : 1;
+        add("PEG Ratio", s, 7, s >= 4 ? "pos" : "neg");
+      }
+
+      // 2. Profitability / Quality (max 25 pts)
+      const roe = d.roe;
+      if (roe != null && !isNaN(roe)) {
+        const s = roe > 0.20 ? 8 : roe > 0.12 ? 5 : roe > 0.05 ? 3 : 0;
+        add("ROE", s, 8, s >= 5 ? "pos" : s >= 3 ? "neu" : "neg");
+      }
+      const pm = d.profitMargin;
+      if (pm != null && !isNaN(pm)) {
+        const s = pm > 0.20 ? 6 : pm > 0.10 ? 4 : pm > 0 ? 2 : 0;
+        add("Profit Margin", s, 6, s >= 4 ? "pos" : s >= 2 ? "neu" : "neg");
+      }
+      const de = d.debtToEquity;
+      if (de != null && !isNaN(de)) {
+        const s = de < 30 ? 6 : de < 80 ? 4 : de < 150 ? 2 : 0;
+        add("Debt/Equity", s, 6, s >= 4 ? "pos" : s >= 2 ? "neu" : "neg");
+      }
+      const cr = d.currentRatio;
+      if (cr != null && !isNaN(cr)) {
+        const s = cr > 2 ? 5 : cr > 1.5 ? 4 : cr > 1 ? 2 : 0;
+        add("Current Ratio", s, 5, s >= 4 ? "pos" : s >= 2 ? "neu" : "neg");
+      }
+
+      // 3. Growth (max 20 pts)
+      const rg = d.revenueGrowth;
+      if (rg != null && !isNaN(rg)) {
+        const s = rg > 0.20 ? 10 : rg > 0.10 ? 7 : rg > 0 ? 4 : 1;
+        add("Revenue Growth", s, 10, s >= 7 ? "pos" : s >= 4 ? "neu" : "neg");
+      }
+      const eg = d.earningsGrowth;
+      if (eg != null && !isNaN(eg)) {
+        const s = eg > 0.20 ? 10 : eg > 0.10 ? 7 : eg > 0 ? 4 : 1;
+        add("Earnings Growth", s, 10, s >= 7 ? "pos" : s >= 4 ? "neu" : "neg");
+      }
+
+      // 4. Momentum / Technicals (max 15 pts)
+      if (d.price && d.high52w && d.low52w && d.high52w > d.low52w) {
+        const pos52 = (d.price - d.low52w) / (d.high52w - d.low52w);
+        const s = pos52 > 0.8 ? 3 : pos52 > 0.5 ? 6 : pos52 > 0.3 ? 8 : 5;
+        add("52W Position", s, 8, s >= 6 ? "pos" : s >= 5 ? "neu" : "neg");
+      }
+      if (d.price && d.avg200) {
+        const aboveDma = d.price > d.avg200;
+        add("200 DMA", aboveDma ? 7 : 2, 7, aboveDma ? "pos" : "neg");
+      }
+
+      // 5. Analyst Sentiment (max 15 pts)
+      const rec = d.recommendation;
+      if (rec) {
+        const recScore = { strong_buy: 10, buy: 8, hold: 5, underperform: 2, sell: 1, strong_sell: 0 };
+        const s = recScore[rec] ?? 5;
+        add("Analyst Rating", s, 10, s >= 7 ? "pos" : s >= 4 ? "neu" : "neg");
+      }
+      if (d.price && d.targetMean && d.targetMean > 0) {
+        const upside = (d.targetMean / d.price - 1);
+        const s = upside > 0.20 ? 5 : upside > 0.05 ? 3 : upside > -0.05 ? 2 : 0;
+        add("Target Upside", s, 5, s >= 3 ? "pos" : s >= 2 ? "neu" : "neg");
+      }
+
+      if (maxTotal === 0) return null;
+      const pct = Math.round((total / maxTotal) * 100);
+      const verdict = pct >= 65 ? "BUY" : pct >= 40 ? "HOLD" : "SELL";
+      const vClass = pct >= 65 ? "verdict-buy" : pct >= 40 ? "verdict-hold" : "verdict-sell";
+      const meterColor = pct >= 65 ? "var(--green)" : pct >= 40 ? "var(--amber)" : "var(--red)";
+
+      return { factors, total, maxTotal, pct, verdict, vClass, meterColor };
+    }
+
+    // ─── VERDICT PANEL COMPONENT ───
+    // ─── ANALYST TREND COMPONENT ───
+    function AnalystTrend({ data }) {
+      const trend = data.recommendationTrend;
+      const earnings = data.earningsTrend;
+      if ((!trend || trend.length === 0) && (!earnings || earnings.length === 0)) return null;
+
+      const periodLabels = { "0m": "Now", "-1m": "1M ago", "-2m": "2M ago", "-3m": "3M ago" };
+
+      return React.createElement("div", { style: { margin: "14px 0" } },
+        // Recommendation Trend
+        trend && trend.length > 0 && React.createElement(React.Fragment, null,
+          React.createElement("div", { className: "section-title" }, "Analyst Sentiment Trend"),
+          React.createElement("div", { className: "trend-grid" },
+            [...trend].reverse().map((t, i) =>
+              React.createElement("div", { key: i, className: "trend-col" },
+                React.createElement("div", { className: "t-period" }, periodLabels[t.period] || t.period),
+                (() => {
+                  const total = t.strongBuy + t.buy + t.hold + t.sell + t.strongSell;
+                  if (total === 0) return null;
+                  const buyPct = ((t.strongBuy + t.buy) / total * 100);
+                  const holdPct = (t.hold / total * 100);
+                  const sellPct = ((t.sell + t.strongSell) / total * 100);
+                  return React.createElement(React.Fragment, null,
+                    React.createElement("div", { className: "consensus-bar", style: { height: 8, minWidth: 0 } },
+                      buyPct > 0 && React.createElement("div", { className: "cb-buy", style: { width: buyPct + "%" } }),
+                      holdPct > 0 && React.createElement("div", { className: "cb-hold", style: { width: holdPct + "%" } }),
+                      sellPct > 0 && React.createElement("div", { className: "cb-sell", style: { width: sellPct + "%" } }),
+                    ),
+                    React.createElement("div", { className: "trend-counts" },
+                      React.createElement("span", { style: { color: "var(--green)" } }, (t.strongBuy + t.buy)),
+                      " / ",
+                      React.createElement("span", { style: { color: "var(--amber)" } }, t.hold),
+                      " / ",
+                      React.createElement("span", { style: { color: "var(--red)" } }, (t.sell + t.strongSell)),
+                    ),
+                  );
+                })(),
+              )
+            ),
+          ),
+          React.createElement("div", { style: { fontSize: "0.65rem", color: "var(--dim)", marginTop: 4, textAlign: "center" } },
+            "Buy / Hold / Sell"
+          ),
+        ),
+
+        // Earnings Estimates
+        earnings && earnings.length > 0 && React.createElement(React.Fragment, null,
+          React.createElement("div", { className: "section-title", style: { marginTop: 14 } }, "Earnings Estimates"),
+          React.createElement("div", { className: "earnings-est-grid" },
+            earnings.filter(e => e.earningsEst && e.earningsEst.avg != null).map((e, i) => {
+              const periodMap = { "0q": "This Qtr", "+1q": "Next Qtr", "0y": "This Year", "+1y": "Next Year" };
+              const growthColor = e.growth > 0 ? "var(--green)" : e.growth < 0 ? "var(--red)" : "var(--muted)";
+              return React.createElement("div", { key: i, className: "est-card" },
+                React.createElement("div", { className: "est-period" }, periodMap[e.period] || e.period),
+                React.createElement("div", { className: "est-val" }, "₹" + e.earningsEst.avg.toFixed(2)),
+                e.growth != null && React.createElement("div", { style: { fontSize: "0.75rem", color: growthColor, fontWeight: 600 } },
+                  (e.growth >= 0 ? "+" : "") + (e.growth * 100).toFixed(1) + "%"
+                ),
+                e.earningsEst.low != null && e.earningsEst.high != null &&
+                  React.createElement("div", { className: "est-range" },
+                    "₹" + e.earningsEst.low.toFixed(2) + " — ₹" + e.earningsEst.high.toFixed(2)
+                  ),
+                e.earningsEst.numAnalysts && React.createElement("div", { className: "est-range" },
+                  e.earningsEst.numAnalysts + " analysts"
+                ),
+              );
+            }),
+          ),
+        ),
+      );
+    }
+
+    function VerdictPanel({ data }) {
+      const analysis = useMemo(() => analyzeStock(data), [data]);
+      if (!analysis) return null;
+
+      const { factors, pct, verdict, vClass, meterColor } = analysis;
+      const posCount = factors.filter(f => f.sentiment === "pos").length;
+      const negCount = factors.filter(f => f.sentiment === "neg").length;
+
+      return React.createElement("div", { className: "verdict-panel fade-in" },
+        // Header row
+        React.createElement("div", { className: "verdict-header" },
+          React.createElement("div", null,
+            React.createElement("span", { className: "verdict-label" }, "Should You Buy?"),
+            React.createElement("span", { style: { fontSize: "0.75rem", color: "var(--dim)", marginLeft: 8 } },
+              posCount + " positive · " + negCount + " negative"
+            ),
+          ),
+          React.createElement("span", { className: "verdict-badge " + vClass }, verdict),
+        ),
+        // Score meter
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)" } },
+          React.createElement("span", null, "Score: " + pct + "/100"),
+          React.createElement("span", null,
+            pct >= 65 ? "Strong fundamentals" : pct >= 50 ? "Moderate outlook" : pct >= 40 ? "Mixed signals" : "Weak fundamentals"
+          ),
+        ),
+        React.createElement("div", { className: "verdict-meter" },
+          React.createElement("div", { className: "verdict-meter-fill", style: { width: pct + "%", background: meterColor } }),
+        ),
+        // Analyst consensus bar (if recommendation exists)
+        data.recommendation && React.createElement("div", { style: { margin: "12px 0 8px" } },
+          React.createElement("div", { style: { fontSize: "0.75rem", color: "var(--muted)", marginBottom: 4 } }, "Analyst Consensus"),
+          React.createElement("div", { className: "analyst-consensus", style: { alignItems: "center" } },
+            React.createElement("span", { className: "verdict-badge " + (
+              ["buy", "strong_buy"].includes(data.recommendation) ? "verdict-buy" :
+              data.recommendation === "hold" ? "verdict-hold" : "verdict-sell"
+            ), style: { fontSize: "0.75rem", padding: "3px 10px" } },
+              data.recommendation.replace("_", " ").toUpperCase()
+            ),
+            data.targetMean && data.price && React.createElement("span", { style: { fontSize: "0.8rem", color: "var(--muted)" } },
+              "Target ₹" + Math.round(data.targetMean) + " (" +
+              ((data.targetMean / data.price - 1) * 100 >= 0 ? "+" : "") +
+              ((data.targetMean / data.price - 1) * 100).toFixed(1) + "%)"
+            ),
+          ),
+        ),
+        // Factor breakdown grid
+        React.createElement("div", { className: "verdict-factors" },
+          factors.map((f, i) =>
+            React.createElement("div", { key: i, className: "verdict-factor" },
+              React.createElement("span", { className: "f-label" }, f.label),
+              React.createElement("span", { className: "f-val f-" + f.sentiment },
+                f.score + "/" + f.max,
+              ),
+            )
+          ),
+        ),
+        // Disclaimer
+        React.createElement("div", { style: { fontSize: "0.65rem", color: "var(--dim)", marginTop: 10, fontStyle: "italic" } },
+          "This analysis is algorithmic and not financial advice. Always do your own research."
+        ),
+      );
+    }
+
+    // ─── DETAIL MODAL ───
+    function DetailModal({ ticker, onClose, watchlist, toggleStar, allStocks }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [news, setNews] = useState([]);
+      const [showAbout, setShowAbout] = useState(false);
+
+      useEffect(() => {
+        setLoading(true);
+        setData(null);
+        fetch(API_BASE + "/api/detail?ticker=" + encodeURIComponent(ticker))
+          .then(r => r.json())
+          .then(d => { if (!d.error) setData(d); })
+          .catch(console.error)
+          .finally(() => setLoading(false));
+
+        const cleanName = ticker.replace(".NS", "").replace("%26", "&");
+        fetch(API_BASE + "/api/news?q=" + encodeURIComponent(cleanName + " NSE stock") + "&limit=5")
+          .then(r => r.json())
+          .then(d => { if (d.articles) setNews(d.articles); })
+          .catch(console.error);
+      }, [ticker]);
+
+      const isWl = watchlist.includes(ticker);
+
+      const recBadge = (rec) => {
+        if (!rec) return null;
+        const map = { buy: "badge-green", strong_buy: "badge-green", hold: "badge-amber", sell: "badge-red", strong_sell: "badge-red", underperform: "badge-red" };
+        return React.createElement("span", { className: `badge ${map[rec] || "badge-blue"}` }, rec.replace("_", " ").toUpperCase());
+      };
+
+      const detailCard = (label, value, color) =>
+        React.createElement("div", { className: "detail-card" },
+          React.createElement("div", { className: "label" }, label),
+          React.createElement("div", { className: "val", style: color ? { color } : {} }, value),
+        );
+
+      return React.createElement("div", { className: "modal-overlay", onClick: (e) => { if (e.target === e.currentTarget) onClose(); } },
+        React.createElement("div", { className: "modal slide-up" },
+          React.createElement("button", { className: "modal-close", onClick: onClose }, "×"),
+
+          loading
+            ? React.createElement("div", { className: "pulse", style: { padding: 40, textAlign: "center", color: "var(--muted)" } }, "Loading " + ticker.replace(".NS", "") + "...")
+            : !data
+              ? React.createElement("div", { style: { padding: 40, textAlign: "center", color: "var(--red)" } }, "Failed to load data for " + ticker)
+              : React.createElement(React.Fragment, null,
+                  // Header
+                  React.createElement("h2", null,
+                    React.createElement("button", { className: "star-btn", onClick: () => toggleStar(ticker) }, isWl ? "★" : "☆"),
+                    data.name || ticker.replace(".NS", ""),
+                    recBadge(data.recommendation),
+                  ),
+                  React.createElement("div", { className: "sub" },
+                    ticker.replace(".NS", ""),
+                    data.sector && (" · " + data.sector),
+                    data.industry && (" · " + data.industry),
+                  ),
+                  React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 } },
+                    React.createElement("span", { className: "mono", style: { fontSize: "1.5rem", fontWeight: 700 } }, fmtPrice(data.price)),
+                    chgBadge(data.changePct ? data.changePct * 100 : null),
+                  ),
+
+                  // Price Chart
+                  React.createElement(StockChart, { ticker }),
+
+                  // Analysis Verdict
+                  React.createElement(VerdictPanel, { data }),
+
+                  // Valuation
+                  React.createElement("div", { className: "section-title" }, "Valuation"),
+                  React.createElement("div", { className: "detail-grid" },
+                    detailCard("P/E", fmt(data.pe, 1), peColor(data.pe)),
+                    detailCard("Forward P/E", fmt(data.forwardPe, 1)),
+                    detailCard("P/B", fmt(data.pb, 1)),
+                    detailCard("EV/EBITDA", fmt(data.evToEbitda, 1)),
+                    detailCard("PEG", fmt(data.pegRatio, 2)),
+                    detailCard("Div Yield", data.divYield != null ? (data.divYield * 100).toFixed(2) + "%" : "—"),
+                  ),
+
+                  // Quality
+                  React.createElement("div", { className: "section-title" }, "Quality"),
+                  React.createElement("div", { className: "detail-grid" },
+                    detailCard("ROE", fmtPct(data.roe)),
+                    detailCard("ROA", fmtPct(data.roa)),
+                    detailCard("Profit Margin", fmtPct(data.profitMargin)),
+                    detailCard("Operating Margin", fmtPct(data.operatingMargin)),
+                    detailCard("Debt/Equity", fmt(data.debtToEquity, 1)),
+                    detailCard("Current Ratio", fmt(data.currentRatio, 2)),
+                  ),
+
+                  // Growth
+                  React.createElement("div", { className: "section-title" }, "Growth"),
+                  React.createElement("div", { className: "detail-grid" },
+                    detailCard("Revenue Growth", fmtPct(data.revenueGrowth)),
+                    detailCard("Earnings Growth", fmtPct(data.earningsGrowth)),
+                    detailCard("Revenue", fmtCr(data.revenue)),
+                    detailCard("EBITDA", fmtCr(data.ebitda)),
+                    detailCard("Free Cash Flow", fmtCr(data.freeCashflow)),
+                    detailCard("Beta", fmt(data.beta, 2)),
+                  ),
+
+                  // 52-Week Range
+                  data.high52w && data.low52w && React.createElement(React.Fragment, null,
+                    React.createElement("div", { className: "section-title" }, "52-Week Range"),
+                    React.createElement("div", { className: "range-slider" },
+                      React.createElement("div", { className: "range-labels" },
+                        React.createElement("span", null, fmtPrice(data.low52w)),
+                        data.avg50 && React.createElement("span", { style: { color: "var(--blue)" } }, "50DMA: " + fmtPrice(data.avg50)),
+                        data.avg200 && React.createElement("span", { style: { color: "var(--orange)" } }, "200DMA: " + fmtPrice(data.avg200)),
+                        React.createElement("span", null, fmtPrice(data.high52w)),
+                      ),
+                      React.createElement("div", { className: "range-track" },
+                        (() => {
+                          const pos = data.high52w - data.low52w > 0
+                            ? ((data.price - data.low52w) / (data.high52w - data.low52w)) * 100 : 50;
+                          return React.createElement(React.Fragment, null,
+                            React.createElement("div", { className: "range-filled", style: { width: Math.min(100, pos) + "%" } }),
+                            React.createElement("div", { className: "range-marker", style: { left: Math.min(100, Math.max(0, pos)) + "%", background: "var(--orange)" } }),
+                          );
+                        })(),
+                      ),
+                    ),
+                  ),
+
+                  // Analyst Targets
+                  (data.targetLow || data.targetMean || data.targetHigh) && React.createElement(React.Fragment, null,
+                    React.createElement("div", { className: "section-title" }, "Analyst Targets (" + (data.numAnalysts || "?") + " analysts)"),
+                    React.createElement("div", { className: "analyst-targets" },
+                      data.targetLow && React.createElement("div", { className: "target-item" },
+                        React.createElement("div", { className: "tl" }, "Low"),
+                        React.createElement("div", { className: "tv mono" }, fmtPrice(data.targetLow)),
+                        data.price && React.createElement("div", { className: "tl" }, ((data.targetLow / data.price - 1) * 100).toFixed(1) + "%"),
+                      ),
+                      data.targetMean && React.createElement("div", { className: "target-item" },
+                        React.createElement("div", { className: "tl" }, "Mean"),
+                        React.createElement("div", { className: "tv mono", style: { color: "var(--orange)" } }, fmtPrice(data.targetMean)),
+                        data.price && React.createElement("div", { className: "tl" }, ((data.targetMean / data.price - 1) * 100).toFixed(1) + "%"),
+                      ),
+                      data.targetHigh && React.createElement("div", { className: "target-item" },
+                        React.createElement("div", { className: "tl" }, "High"),
+                        React.createElement("div", { className: "tv mono" }, fmtPrice(data.targetHigh)),
+                        data.price && React.createElement("div", { className: "tl" }, ((data.targetHigh / data.price - 1) * 100).toFixed(1) + "%"),
+                      ),
+                    ),
+                  ),
+
+                  // Analyst Sentiment Trend + Earnings Estimates
+                  React.createElement(AnalystTrend, { data }),
+
+                  // Peer Comparison
+                  (() => {
+                    const currentStock = allStocks && allStocks.find(s => s.ticker === ticker);
+                    const ind = (currentStock && currentStock.industry) || data.industry;
+                    if (!ind || !allStocks) return null;
+                    const peers = allStocks
+                      .filter(s => s.industry === ind && s.ticker !== ticker && s.price)
+                      .sort((a, b) => (b.mcap || 0) - (a.mcap || 0))
+                      .slice(0, 5);
+                    if (peers.length === 0) return null;
+                    return React.createElement(React.Fragment, null,
+                      React.createElement("div", { className: "section-title" }, "Peer Comparison · " + ind),
+                      React.createElement("div", { style: { overflowX: "auto" } },
+                        React.createElement("table", { className: "peer-table" },
+                          React.createElement("thead", null,
+                            React.createElement("tr", null,
+                              React.createElement("th", null, "Company"),
+                              React.createElement("th", null, "Price"),
+                              React.createElement("th", null, "Chg%"),
+                              React.createElement("th", null, "P/E"),
+                              React.createElement("th", null, "P/B"),
+                              React.createElement("th", null, "MCap"),
+                              React.createElement("th", null, "Score"),
+                            ),
+                          ),
+                          React.createElement("tbody", null,
+                            // Current stock row
+                            React.createElement("tr", { className: "peer-current" },
+                              React.createElement("td", { style: { fontWeight: 600, color: "var(--orange)" } }, (data.name || ticker.replace(".NS", "")).substring(0, 25)),
+                              React.createElement("td", { className: "mono" }, fmtPrice(data.price)),
+                              React.createElement("td", null, chgBadge(data.changePct ? data.changePct * 100 : null)),
+                              React.createElement("td", { className: "mono" }, fmt(data.pe, 1)),
+                              React.createElement("td", { className: "mono" }, fmt(data.pb, 1)),
+                              React.createElement("td", { className: "mono" }, fmtCr(data.mcap)),
+                              React.createElement("td", { className: "mono" }, currentStock ? currentStock.score : "—"),
+                            ),
+                            // Peer rows
+                            peers.map(p =>
+                              React.createElement("tr", { key: p.ticker, style: { cursor: "pointer" }, onClick: () => { /* could navigate */ } },
+                                React.createElement("td", null, (p.name || p.ticker.replace(".NS", "")).substring(0, 25)),
+                                React.createElement("td", { className: "mono" }, fmtPrice(p.price)),
+                                React.createElement("td", null, chgBadge(p.changePct)),
+                                React.createElement("td", { className: "mono", style: { color: peColor(p.pe) } }, fmt(p.pe, 1)),
+                                React.createElement("td", { className: "mono" }, fmt(p.pb, 1)),
+                                React.createElement("td", { className: "mono" }, fmtCr(p.mcap)),
+                                React.createElement("td", { className: "mono" }, p.score || "—"),
+                              )
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  })(),
+
+                  // About
+                  data.longBusinessSummary && React.createElement(React.Fragment, null,
+                    React.createElement("div", { className: "section-title" }, "About"),
+                    React.createElement("button", { className: "about-toggle", onClick: () => setShowAbout(!showAbout) },
+                      showAbout ? "Hide details ▲" : "Show details ▼"
+                    ),
+                    showAbout && React.createElement("div", { className: "about-text fade-in" }, data.longBusinessSummary),
+                    data.website && React.createElement("div", { style: { marginTop: 6 } },
+                      React.createElement("a", { href: data.website, target: "_blank", rel: "noopener", style: { fontSize: "0.8rem" } }, data.website),
+                    ),
+                    data.employees && React.createElement("div", { style: { fontSize: "0.75rem", color: "var(--dim)", marginTop: 4 } },
+                      data.employees.toLocaleString() + " employees"
+                    ),
+                  ),
+
+                  // Ticker News
+                  news.length > 0 && React.createElement(React.Fragment, null,
+                    React.createElement("div", { className: "section-title" }, "News"),
+                    news.map((a, i) =>
+                      React.createElement("a", { key: i, href: a.link, target: "_blank", rel: "noopener", style: { display: "block", marginBottom: 8 } },
+                        React.createElement("div", { className: "news-card" },
+                          React.createElement("div", { className: "title" }, a.title),
+                          React.createElement("div", { className: "meta" },
+                            React.createElement("span", null, a.source),
+                            React.createElement("span", null, a.timeAgo),
+                          ),
+                        ),
+                      )
+                    ),
+                  ),
+                ),
+        ),
+      );
+    }
+
+    // ─── ADD TICKER MODAL ───
+    function AddTickerModal({ onClose, onAdd }) {
+      const [input, setInput] = useState("");
+      const [checking, setChecking] = useState(false);
+      const [error, setError] = useState("");
+
+      const doAdd = async () => {
+        if (!input.trim()) return;
+        setChecking(true);
+        setError("");
+        const ticker = input.toUpperCase().trim();
+        const sym = ticker.endsWith(".NS") ? ticker : ticker + ".NS";
+        try {
+          const res = await fetch(API_BASE + "/api/detail?ticker=" + encodeURIComponent(sym));
+          const data = await res.json();
+          if (data.error || !data.price) {
+            setError("Ticker not found on NSE. Try a valid symbol like ZOMATO, PAYTM, IRCTC.");
+          } else {
+            onAdd(sym);
+          }
+        } catch(e) {
+          setError("Failed to validate ticker. Check your connection.");
+        }
+        setChecking(false);
+      };
+
+      return React.createElement("div", { className: "modal-overlay", onClick: (e) => { if (e.target === e.currentTarget) onClose(); } },
+        React.createElement("div", { className: "modal slide-up", style: { maxWidth: 420 } },
+          React.createElement("button", { className: "modal-close", onClick: onClose }, "×"),
+          React.createElement("h2", null, "Add Custom Ticker"),
+          React.createElement("p", { style: { color: "var(--muted)", fontSize: "0.82rem" } },
+            "Enter any NSE ticker symbol to add it to the screener."
+          ),
+          React.createElement("input", {
+            className: "add-ticker-input mono",
+            placeholder: "e.g. ZOMATO",
+            value: input,
+            onChange: e => setInput(e.target.value),
+            onKeyDown: e => e.key === "Enter" && doAdd(),
+            autoFocus: true,
+          }),
+          error && React.createElement("div", { className: "error-text" }, error),
+          React.createElement("button", {
+            className: "btn btn-primary",
+            style: { width: "100%", marginTop: 10 },
+            onClick: doAdd,
+            disabled: checking,
+          }, checking ? "Validating..." : "Add Ticker"),
+        ),
+      );
+    }
+
+    // ─── MOUNT ───
+    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+  </script>
+</body>
+</html>
