@@ -101,8 +101,11 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   // Check for Supabase config via env
-  const sbUrl = process.env.SUPABASE_URL || "https://jvdtliqrstgvioigfcjc.supabase.co";
-  const sbKey = process.env.SUPABASE_SERVICE_KEY; // must be set in Vercel env vars
+  const sbUrl = (process.env.SUPABASE_URL || "https://jvdtliqrstgvioigfcjc.supabase.co").replace(/[^\x00-\x7F]/g, "").trim();
+  // Strip any non-ASCII chars (e.g. accidentally pasted emojis) and trim whitespace
+  const sbKey = process.env.SUPABASE_SERVICE_KEY
+    ? process.env.SUPABASE_SERVICE_KEY.replace(/[^\x20-\x7E]/g, "").trim()
+    : null;
 
   if (!sbKey) {
     return res.status(200).json({
